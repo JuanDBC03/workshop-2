@@ -1,0 +1,23 @@
+============================================================
+WORKSHOP 2 - EVIDENCE TEST C: SAFE RERUN & IDEMPOTENCY
+============================================================
+Run 1 Identifier: manual__2026-10-08T05:17:53.571414+00:00 (State: success)
+Run 2 Identifier: manual__2026-10-08T05:19:43.308595+00:00 (State: success)
+
+Target Data Warehouse Verification (Pre-Rerun vs Post-Rerun):
+------------------------------------------------------------------------------------------------------
+Metric                  Pre-Rerun (Run 1)       Post-Rerun (Run 2)      Difference
+------------------------------------------------------------------------------------------------------
+dim_genre               114                     114                     0 (Identical)
+dim_ceremony_time       62                      62                      0 (Identical)
+dim_artist              17,648                  17,648                  0 (Identical)
+dim_track               89,740                  89,740                  0 (Identical)
+fact_track_performance  113,549                 113,549                 0 (Identical)
+Total Popularity Sum    3,783,956               3,783,956               0 (Identical)
+Average Energy          0.6421                  0.6421                  0.0000 (Identical)
+
+Strategy Applied:
+- Staging temp tables + Set-based ON CONFLICT DO UPDATE/DO NOTHING.
+- Natural/Composite keys enforced at table DDL level (e.g. uq_track_genre ON (track_id, genre_id)).
+- Proven Zero-Duplication Invariant under identical source input batches.
+============================================================

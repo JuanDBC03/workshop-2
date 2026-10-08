@@ -1,0 +1,32 @@
+============================================================
+WORKSHOP 2 - EVIDENCE TEST B: CONTROLLED CRITICAL FAILURE
+============================================================
+Run Identifier: manual__2026-10-08T05:21:22.881947+00:00
+Configuration: {"spotify_file": "spotify_bad.csv"}
+Injected Violation: energy = 15.0 on index 0 (Rule DQ-RAW-02a)
+Expected Behavior: 
+- extract_spotify: success
+- validate_spotify_raw: failed with CRITICAL failure
+- Downstream tasks blocked: upstream_failed
+
+Observed Task Instance States:
+------------------------------------------------------------------------------------------------------
+Task ID                         State           Start Date                         End Date
+------------------------------------------------------------------------------------------------------
+extract_spotify                 success         2026-10-08T05:21:23.829009+00:00   2026-10-08T05:21:30.417278+00:00
+extract_grammys                 success         2026-10-08T05:21:23.829002+00:00   2026-10-08T05:21:28.657519+00:00
+validate_grammys_raw            success         2026-10-08T05:21:28.772697+00:00   2026-10-08T05:21:33.656182+00:00
+validate_spotify_raw            FAILED          2026-10-08T05:21:30.874491+00:00   2026-10-08T05:21:36.252425+00:00
+transform_and_integrate_sources upstream_failed 2026-10-08T05:21:36.753597+00:00   2026-10-08T05:21:36.753597+00:00
+validate_prepared               upstream_failed 2026-10-08T05:21:37.686520+00:00   2026-10-08T05:21:37.686520+00:00
+load_dw                         upstream_failed 2026-10-08T05:21:37.688703+00:00   2026-10-08T05:21:37.688703+00:00
+
+Actionable Log Detail:
+------------------------------------------------------------------------------------------------------
+[GX VALIDATION] Stage: spotify_raw | Success: False | Max Failure Severity: FailureSeverity.CRITICAL
+ValueError: [CRITICAL QUALITY FAILURE] Spotify raw validation failed on critical expectation. 
+Downstream transformation is blocked. Success: False
+
+Result: The pipeline halted immediately, isolating the failure and preventing corrupt records
+from reaching the transformation stage or contaminating the Data Warehouse.
+============================================================
