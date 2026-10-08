@@ -1,0 +1,34 @@
+{
+  "expectations": [
+    {
+      "id": "036d647b-2844-4686-82ea-0543e63a55c8",
+      "kwargs": {
+        "column": "year",
+        "max_value": 2026.0,
+        "min_value": 1958.0
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_be_between"
+    },
+    {
+      "id": "ab7b3548-803f-44d3-83e6-5de18d61162c",
+      "kwargs": {
+        "column": "winner",
+        "value_set": [
+          true,
+          false
+        ]
+      },
+      "meta": {},
+      "severity": "critical",
+      "type": "expect_column_values_to_be_in_set"
+    }
+  ],
+  "id": "b6922fbd-b047-4de8-ab7a-4197d23e07c7",
+  "meta": {
+    "great_expectations_version": "1.24.0"
+  },
+  "name": "grammys_raw_suite",
+  "notes": null
+}
