@@ -1,0 +1,22 @@
+{
+  "data": {
+    "asset": {
+      "id": "1b1810cb-1feb-4fd6-b012-f4137c5b26b3",
+      "name": "grammys_asset"
+    },
+    "batch_definition": {
+      "id": "1d609c57-e86b-47a2-9647-3705aad9b55f",
+      "name": "grammys_batch"
+    },
+    "datasource": {
+      "id": "aa5c1121-1956-4121-9d5e-dddb73934964",
+      "name": "grammys_source"
+    }
+  },
+  "id": "261ccf99-e3b2-44ba-a6f6-0e5437f95963",
+  "name": "grammys_raw_validation",
+  "suite": {
+    "id": "b6922fbd-b047-4de8-ab7a-4197d23e07c7",
+    "name": "grammys_raw_suite"
+  }
+}
