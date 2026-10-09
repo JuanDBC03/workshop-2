@@ -102,8 +102,11 @@ Empirical findings gathered via `notebooks/data_profiling.ipynb`:
 ---
 
 ## 7. Great Expectations Validation Design
-Implemented in `src/validation.py` using **Great Expectations Core 1.x (1.24.x Fluent API)**:
-* **Separation of Suites:** Distinct suites for `spotify_raw`, `grammys_raw`, and `prepared`.
+Implemented in `src/validation.py` and persisted in `gx/` using **Great Expectations Core 1.x (1.24.x Fluent API)**:
+* **Persisted Project Structure:** 
+  * `gx/great_expectations.yml`: Data context configuration.
+  * `gx/expectations/`: Stores machine-readable JSON suites (`spotify_raw_suite.json`, `grammys_raw_suite.json`, `prepared_suite.json`).
+  * `gx/validation_definitions/`: Stores explicit bindings between batch definitions and suites (`spotify_raw_validation.json`, etc.).
 * **Execution Flow:** `context.data_sources.add_pandas()` $\rightarrow$ `add_dataframe_asset()` $\rightarrow$ `add_batch_definition_whole_dataframe()` $\rightarrow$ `ValidationDefinition.run()`.
 * **Severity Enforcement:**
   * `FailureSeverity.CRITICAL`: Triggers explicit `ValueError`, raising an exception that causes Airflow to fail the task and mark downstream tasks as `upstream_failed`.
@@ -285,7 +288,85 @@ GROUP BY 1;
 
 ---
 
-## 13. Setup and Execution Instructions
+## 13. Power BI Configuration Step-by-Step
+
+### Connecting Power BI to the Data Warehouse
+1. Open **Power BI Desktop**.
+2. Select **Get Data** $\rightarrow$ **More...** $\rightarrow$ **PostgreSQL database**.
+3. Connection inputs:
+   * **Server:** `localhost:5432`
+   * **Database:** `music_dw`
+   * **Data Connectivity mode:** DirectQuery or Import
+4. Credentials:
+   * **Username:** `postgres`
+   * **Password:** `postgres`
+5. Load all 5 warehouse tables: `dim_artist`, `dim_track`, `dim_genre`, `dim_ceremony_time`, `fact_track_performance`.
+
+### Building the 3 Analytical Visuals & KPIs
+* **Visual 1 (REQ-01):** Clustered Column Chart.
+  * X-Axis: `dim_ceremony_time.decade` (Filtered to 1950s–2010s).
+  * Y-Axis: `Average of popularity` (from `fact_track_performance`).
+  * KPI Card: Overall Average Popularity of awarded catalog (`40.31`).
+* **Visual 2 (REQ-02):** Clustered Bar Chart.
+  * Y-Axis: `dim_genre.macro_category` (Filtered to `'Pop'` and `'Urban'`).
+  * Legend: `dim_artist.is_grammy_winner`.
+  * X-Axis: `Average of energy`.
+  * KPI Card: Acoustic Energy Gap ($-0.0662$ in Pop; $-0.0601$ in Urban).
+* **Visual 3 (REQ-03):** Column Chart.
+  * Axis: Calculated Column for Award Tier (`>=3 Wins`, `1-2 Wins`, `0 Wins`).
+  * Values: Average count of distinct `genre_id` per artist.
+  * KPI Card: Versatility Ratio ($2.05$ vs $1.32$ genres explored).
+
+---
+
+## 14. Live Evaluation Demonstrations
+
+### Demonstration 1: Successful End-to-End Execution (Test A)
+1. Open browser at [http://localhost:8080](http://localhost:8080) (Credentials: `admin` / `admin`).
+2. Show `reliable_music_pipeline` Grid and Graph views showing all tasks green.
+3. Run verification query in PowerShell:
+   ```powershell
+   docker exec workshop2-postgres psql -U postgres -d music_dw -c "SELECT count(*) FROM fact_track_performance;"
+   ```
+   **Result:** Exactly `113,549` rows.
+
+### Demonstration 2: Controlled Critical Failure & Blocking (Test B)
+1. Trigger pipeline with corrupted data payload:
+   ```powershell
+   docker exec workshop2-airflow airflow dags trigger -c '{"spotify_file": "spotify_bad.csv"}' reliable_music_pipeline
+   ```
+2. Show `validate_spotify_raw` failing in red, while `transform_and_integrate_sources` and `load_dw` stay in orange (`upstream_failed`).
+3. View task log showing Great Expectations catching `energy = 15.0`.
+
+### Demonstration 3: Safe Rerun & Idempotency (Test C)
+1. Trigger pipeline again over identical data:
+   ```powershell
+   docker exec workshop2-airflow airflow dags trigger reliable_music_pipeline
+   ```
+2. Show that row count remains strictly `113,549` and `SUM(popularity)` remains `3,783,956` ($\Delta = 0$).
+
+---
+
+## 15. Oral Defense Technical Q&A
+
+### Q1: Why use TaskFlow API (`from airflow.sdk import dag, task`) instead of standard `PythonOperator`?
+> *"The TaskFlow API is the modern standard of Apache Airflow 3. It eliminates boilerplate code, handles parameter passing cleanly, and communicates workflow dependencies explicitly without sending heavy DataFrames through orchestrator metadata."*
+
+### Q2: How does the pipeline guarantee idempotency? What happens if `load_dw` fails midway?
+> *"All loading operations run inside an atomic database transaction (`with engine.begin()`). If an error occurs, PostgreSQL automatically rolls back the entire batch. Furthermore, the load logic uses temporary staging tables and set-based upserts (`ON CONFLICT (track_id, genre_id) DO UPDATE`), guaranteeing that rerunning updates existing keys rather than duplicating rows."*
+
+### Q3: Why is selective retrying used instead of a blanket `retries=3` on every task?
+> *"Data quality contract violations are deterministic: retrying an invalid value 3 times produces the identical failure 3 times, wasting resources. Therefore, validation tasks use `retries=0`. In contrast, database network operations use `retries=2` to tolerate transient connection drops or temporary write locks."*
+
+### Q4: Why use Great Expectations 1.x instead of basic Python assertions?
+> *"Great Expectations provides formal, auditable data contracts. It produces structured validation statistics, tracks severities (Critical vs Warning), and generates auditable artifacts. Basic assertions halt execution without diagnostic context."*
+
+### Q5: How is REQ-01 answered without duplicating track records for songs awarded multiple times?
+> *"In our Star Schema, `dim_track` maintains one unique record per Spotify song. Historical ceremony context is normalized into `dim_ceremony_time`. The fact table `fact_track_performance` models each track performance by genre and links to the award ceremony time key, allowing analytical queries to aggregate popularity by decade without duplicating acoustic measurements."*
+
+---
+
+## 16. Setup and Execution Instructions
 
 ### Prerequisites
 * Docker Desktop (running with WSL2 backend on Windows 11).
@@ -303,7 +384,7 @@ docker compose up -d
 Get-Content sql/source_setup.sql | docker exec -i workshop2-postgres psql -U postgres -d grammy_source
 
 # 4. Open Airflow Web UI
-# URL: http://localhost:8080 (Authentication disabled / Simple Auth Admin enabled)
+# URL: http://localhost:8080 (Username: admin | Password: admin)
 
 # 5. Trigger the production pipeline (Test A)
 docker exec workshop2-airflow airflow dags trigger reliable_music_pipeline
@@ -311,7 +392,7 @@ docker exec workshop2-airflow airflow dags trigger reliable_music_pipeline
 
 ---
 
-## 14. Assumptions and Limitations
+## 17. Assumptions and Limitations
 1. **Artist Matching Assumption:** Multi-artist collaborative tracks (e.g., `Ingrid Michaelson;ZAYN`) are credited to the primary lead artist for dimensional foreign key integrity.
 2. **Streaming Popularity Timeliness:** Spotify popularity is an instantaneous rolling metric reflecting current listening activity, enabling comparative analysis of catalog longevity.
 3. **Scope Limitation:** The Grammy dataset covers awards through 2019; contemporary tracks released after 2019 are evaluated under the non-awarded baseline.
