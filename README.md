@@ -225,6 +225,9 @@ The orchestration DAG `dags/reliable_music_pipeline.py` uses the official **Task
 * **Result:** All 7 tasks completed with `success`.
 * **Execution Time:** 1 minute 3 seconds.
 * **Log Evidence:** Preserved in `docs/evidence/test_a_successful_run.txt`.
+* **Visual Evidence:**
+  ![Airflow Graph View](docs/screenshots/airflow_graph_view.png)
+  ![Airflow Grid View](docs/screenshots/airflow_grid_view.png)
 * **Reconciled DW Counts:** `dim_genre: 114`, `dim_ceremony_time: 62`, `dim_artist: 17,648`, `dim_track: 89,740`, `fact_track_performance: 113,549`.
 
 ### Test B: Controlled Critical Quality Failure
@@ -237,6 +240,8 @@ The orchestration DAG `dags/reliable_music_pipeline.py` uses the official **Task
   * `validate_prepared`: **`upstream_failed`** (Blocked).
   * `load_dw`: **`upstream_failed`** (Blocked).
 * **Log Evidence:** Preserved in `docs/evidence/test_b_controlled_failure.txt`.
+* **Visual Evidence:**
+  ![Airflow Controlled Failure Task Log](docs/screenshots/airflow_test_b_failure_log.png)
 
 ### Test C: Safe Rerun & Idempotency
 * **Run ID:** `manual__2026-10-08T05:19:43.308595+00:00`
@@ -285,6 +290,10 @@ GROUP BY 1;
    * Awarded Artists (1–2 wins): **1.86** distinct genres explored.
    * Non-Winners (0 wins): **1.32** distinct genres explored.
    * Conclusion: Multi-awarded artists explore +55% more genres across their catalog.
+
+### Dashboard & Dimensional Model Screenshots:
+![Power BI Analytics Dashboard](docs/screenshots/powerbi_dashboard.png)
+![Power BI Star Schema Data Model](docs/screenshots/powerbi_data_model.png)
 
 ---
 
