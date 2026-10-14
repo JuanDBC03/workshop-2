@@ -35,7 +35,7 @@ Instead of assuming data is valid, the pipeline actively verifies it through thr
 | **REQ-02** | **Acoustic Behavior in Pop and Urban Genres:** What acoustic gap (energy, speechiness) exists between Grammy-winning artists vs non-winners? Supports sound engineering and editorial curation. | `the_grammy_awards.artist`, `winner`, `spotify_dataset.artists`, `track_genre`, `speechiness`, `energy` | **Acoustic Gap:** $\text{AVG}(energy)_{\text{winner}} - \text{AVG}(energy)_{\text{non-winner}}$ | Genre $\times$ Artist | Spotify extracts algorithmic acoustic traits; Grammys determines historical award status. |
 | **REQ-03** | **Genre Diversity in Multi-Awarded Artists:** Do artists who win across multiple categories explore more genres in Spotify? Supports artist sponsorship and talent scouting. | `the_grammy_awards.artist`, `category`, `winner`, `spotify_dataset.artists`, `track_genre` | **AVG(COUNT(DISTINCT track_genre))** comparing $\ge 3$ awards vs 1 award vs non-winners | Artist | Award counts originate from Grammys; genre exploration mappings originate from Spotify. |
 
-### Business Rationale & Analytical Findings ("Técnico Suave")
+### Business Rationale & Analytical Findings
 
 * **REQ-01 — Temporal Longevity of Awarded Music (Decade Popularity):**
   * **The Business Question:** When a streaming platform licenses music catalogs, do historical Grammy-winning songs from 40 or 50 years ago still generate active listening and commercial value today?
@@ -141,36 +141,36 @@ Empirical findings gathered via `notebooks/data_profiling.ipynb`:
 | **DQ-PREP-01** | Prepared | `track_genre`, `popularity` | Completeness & Validity | Genre must be present; popularity in [0, 100] | 100% valid | **Critical** | REQ-01, REQ-02 |
 | **DQ-PREP-02** | Prepared | `is_grammy_winner` | Validity & Invariant | Derived winner flag must be binary integer | 100% in {0, 1} | **Critical** | REQ-02, REQ-03 |
 
-### 6.1 Plain-Language Rationale for Implemented Expectations ("Técnico Suave")
+### 6.1 Plain-Language Rationale for Implemented Expectations
 
 Every expectation configured in `src/validation.py` directly protects against a concrete data quality risk discovered during data profiling:
 
 1. **`ExpectColumnValuesToNotBeNull(column="track_id")` — Severity: Critical**
    * **What it verifies:** Guarantees that every song record has a non-null identifier.
-   * **Why it matters (Técnico Suave):** In our Star Schema, `track_id` is the primary key linking songs to facts. If an ID is missing, that song cannot be joined to any dimension, corrupting catalog counts. Therefore, a null ID is a **Critical** defect that immediately halts execution.
+   * **Why it matters:** In our Star Schema, `track_id` is the primary key linking songs to facts. If an ID is missing, that song cannot be joined to any dimension, corrupting catalog counts. Therefore, a null ID is a **Critical** defect that immediately halts execution.
 
 2. **`ExpectColumnValuesToBeBetween(column="energy", min_value=0.0, max_value=1.0)` & `speechiness` — Severity: Critical**
    * **What it verifies:** Audio features must stay strictly within their natural mathematical scale of $[0.0, 1.0]$.
-   * **Why it matters (Técnico Suave):** Spotify's machine learning models calculate acoustic features as normalized ratios (0.0 = calm/acoustic, 1.0 = loud/distorted/fast). An impossible number like `energy = 15.0` (which we injected in Test B) indicates an extraction anomaly or corrupted telemetry. If permitted into the warehouse, it would distort the acoustic gap analysis in REQ-02.
+   * **Why it matters:** Spotify's machine learning models calculate acoustic features as normalized ratios (0.0 = calm/acoustic, 1.0 = loud/distorted/fast). An impossible number like `energy = 15.0` (which we injected in Test B) indicates an extraction anomaly or corrupted telemetry. If permitted into the warehouse, it would distort the acoustic gap analysis in REQ-02.
 
 3. **`ExpectColumnValuesToNotBeNull(column="artists", mostly=0.999)` — Severity: Warning**
    * **What it verifies:** Verifies artist completeness, allowing up to 0.1% missing values.
-   * **Why it matters (Técnico Suave):** During data profiling, we discovered that out of 114,000 Spotify tracks, exactly **1 single track** had a null artist name. In real-world enterprise engineering, aborting a million-dollar batch pipeline for a 0.0008% imperfection is poor operational practice. By setting `mostly=0.999` with `severity="warning"`, the pipeline logs the anomaly for auditing without blocking downstream execution.
+   * **Why it matters:** During data profiling, we discovered that out of 114,000 Spotify tracks, exactly **1 single track** had a null artist name. In real-world enterprise engineering, aborting a million-dollar batch pipeline for a 0.0008% imperfection is poor operational practice. By setting `mostly=0.999` with `severity="warning"`, the pipeline logs the anomaly for auditing without blocking downstream execution.
 
 4. **`ExpectColumnValuesToBeBetween(column="year", min_value=1958, max_value=2026)` — Severity: Critical**
    * **What it verifies:** Ceremony year must fall strictly between 1958 and 2026.
-   * **Why 1958 and why 2026? (Técnico Suave):**
+   * **Why 1958 and why 2026?:**
      * **Why 1958?** The 1st Annual Grammy Awards took place covering the 1958 musical year (held in May 1959). Any year before 1958 (e.g., 1920, 0, or negative numbers) is historically impossible and proves corrupted data.
      * **Why 2026?** 2026 represents the current operational calendar year of the system. In temporal data contracts, award ceremonies cannot occur in the future beyond the current operating year (e.g., year 2045 or 9999). Setting the upper limit to 2026 allows the pipeline to process modern batches up to the current year while strictly blocking future-dated anomalies.
      * Any violation is **Critical** because it would distort decade groupings in REQ-01.
 
 5. **`ExpectColumnValuesToBeInSet(column="winner", value_set=[True, False])` — Severity: Critical**
    * **What it verifies:** The award outcome must be strictly boolean (`True` or `False`).
-   * **Why it matters (Técnico Suave):** This attribute divides the entire dataset into award winners and non-winners. If a record contains null, text strings ("maybe"), or invalid codes, all downstream comparisons comparing winners vs non-winners (REQ-02 and REQ-03) would be invalidated.
+   * **Why it matters:** This attribute divides the entire dataset into award winners and non-winners. If a record contains null, text strings ("maybe"), or invalid codes, all downstream comparisons comparing winners vs non-winners (REQ-02 and REQ-03) would be invalidated.
 
 6. **Prepared Layer Expectations (`popularity` [0, 100], `track_genre` non-null, `is_grammy_winner` in {0, 1}, `artist_name` non-null) — Severity: Critical**
    * **What it verifies:** Acts as the "final quality gate" right before writing to PostgreSQL.
-   * **Why it matters (Técnico Suave):** Transformation logic cleans artist names, splits semicolons, and maps macro categories. This prepared gate verifies that the post-transformation dataset satisfies the warehouse schema contract. If anything broke during transformation, it halts before touching the Data Warehouse.
+   * **Why it matters:** Transformation logic cleans artist names, splits semicolons, and maps macro categories. This prepared gate verifies that the post-transformation dataset satisfies the warehouse schema contract. If anything broke during transformation, it halts before touching the Data Warehouse.
 
 ---
 
