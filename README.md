@@ -175,15 +175,42 @@ Every expectation configured in `src/validation.py` directly protects against a 
 ---
 
 ## 7. Great Expectations Validation Design
-Implemented in `src/validation.py` and persisted in `gx/` using **Great Expectations Core 1.x (1.24.x Fluent API)**:
-* **Persisted Project Structure:** 
-  * `gx/great_expectations.yml`: Data context configuration.
-  * `gx/expectations/`: Stores machine-readable JSON suites (`spotify_raw_suite.json`, `grammys_raw_suite.json`, `prepared_suite.json`).
-  * `gx/validation_definitions/`: Stores explicit bindings between batch definitions and suites (`spotify_raw_validation.json`, etc.).
-* **Execution Flow:** `context.data_sources.add_pandas()` $\rightarrow$ `add_dataframe_asset()` $\rightarrow$ `add_batch_definition_whole_dataframe()` $\rightarrow$ `ValidationDefinition.run()`.
-* **Severity Enforcement:**
-  * `FailureSeverity.CRITICAL`: Triggers explicit `ValueError`, raising an exception that causes Airflow to fail the task and mark downstream tasks as `upstream_failed`.
-  * `FailureSeverity.WARNING`: Emits structured log notices while allowing pipeline continuation per policy.
+
+Data quality in this pipeline is not treated as an afterthought or a series of scattered `assert` statements. Instead, it is implemented as formal **Data Contracts** using **Great Expectations Core 1.x (1.24.x Fluent API)** in `src/validation.py`, persisted in the `gx/` directory for full reproducibility.
+
+### 7.1 Architecture of Great Expectations 1.x Fluent API
+Unlike legacy versions of Great Expectations (0.18 and earlier) that relied on complex configuration files and checkpoints, GX 1.x introduces a streamlined, declarative hierarchy implemented through five core building blocks:
+
+1. **Data Context (`gx.get_context()`):** The central runtime environment that manages data sources, expectation suites, and execution configurations.
+2. **Data Source & Asset (`context.data_sources.add_pandas()`):** Establishes an explicit connection to the Pandas ingestion engine and registers a named logical asset (`{stage}_asset`).
+3. **Batch Definition (`add_batch_definition_whole_dataframe()`):** Declares the evaluation grain—defining that each pipeline run evaluates the complete batch payload in memory.
+4. **Expectation Suite (`gx.ExpectationSuite()`):** A versioned, declarative collection of assertions (expectations) defining what must be true about the data.
+5. **Validation Definition & Execution (`gx.ValidationDefinition()`):** Explicitly pairs a Batch Definition with an Expectation Suite. Calling `.run()` evaluates the contract and returns a structured `ValidationResult` containing exact pass/fail counts, observed values, and failure severities.
+
+### 7.2 The Two-Gate Validation Strategy
+Quality controls are strategically decoupled into two defensive perimeter checkpoints:
+
+* **Gate 1: Raw-Data Validation (Before Transformation):**
+  * *Purpose:* Inspects raw ingested data directly at the source boundary.
+  * *Coverage:* Validates primary key completeness (`track_id` non-null), physical telemetry boundaries (`energy` and `speechiness` $\in [0.0, 1.0]$), and historical calendar limits (`year` $\in [1958, 2026]$).
+  * *Fault Isolation:* Each source branch (`spotify_raw` and `grammys_raw`) is validated independently in parallel, allowing Airflow to isolate which external source is compromised.
+* **Gate 2: Prepared-Data Validation (Before Data Warehouse Loading):**
+  * *Purpose:* Inspects the integrated, cleaned dataset immediately before database ingestion.
+  * *Coverage:* Verifies that string normalization, semicolon artist parsing, and macro-genre derivations succeeded without creating unexpected nulls or violating warehouse schema constraints (`popularity` $\in [0, 100]$, `is_grammy_winner` $\in \{0, 1\}$).
+
+### 7.3 Operational Severity Policy & Airflow Interlock
+Every expectation is tagged with an operational severity level to dictate pipeline behavior:
+
+| Severity Level | Pipeline Response | Airflow State Impact | Operational Justification |
+| :--- | :--- | :--- | :--- |
+| **`FailureSeverity.CRITICAL`** | **Immediate Halt:** Raises a `ValueError` terminating the task. | Task turns **`FAILED` (Red)**; downstream tasks turn **`UPSTREAM_FAILED` (Orange)**. | The violation threatens analytical validity or database schema integrity (e.g., `energy = 15.0`). The Data Warehouse is shielded from corruption. |
+| **`FailureSeverity.WARNING`** | **Log & Continue:** Emits structured warning logs with observed statistics. | Task remains **`SUCCESS` (Green)**; pipeline proceeds normally. | The anomaly is non-fatal and within documented tolerance (e.g., 1 missing artist in 114,000 tracks, satisfying `mostly=0.999`). Prevents unnecessary batch halts. |
+
+### 7.4 On-Disk Persistence & Audit Trail
+To ensure auditability across environments, all validation assets are persisted on disk:
+* `gx/great_expectations.yml`: Configuration root defining stores and context metadata.
+* `gx/expectations/`: Machine-readable JSON specifications of the active suites (`spotify_raw_suite.json`, `grammys_raw_suite.json`, `prepared_suite.json`).
+* `gx/validation_definitions/`: Persisted JSON definitions linking batches to suites (`spotify_raw_validation.json`, etc.).
 
 ---
 
