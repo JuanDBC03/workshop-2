@@ -73,6 +73,13 @@ The matrix below connects each business requirement through the full data engine
 
 ## 4. Pipeline Architecture
 
+The pipeline follows a decoupled, two-branch convergent pattern designed for fault isolation, automated quality protection, and idempotent loading:
+
+1. **Parallel Extraction:** Simultaneously ingests Spotify data from local CSV and extracts Grammy records from the operational PostgreSQL database using SQL queries.
+2. **Raw Quality Gates (Gate 1):** Great Expectations 1.x independently inspects both raw sources. If a critical violation occurs (e.g., invalid audio ranges), the pipeline halts immediately to protect downstream stages.
+3. **Harmonization & Integration:** Cleans collaborative artist strings (semicolon parsing), aggregates Grammy awards per artist, and clusters genres into macro categories (`Pop`, `Urban`, `Other`).
+4. **Prepared Gate & Idempotent Load (Gate 2):** Conducts a final pre-load quality check before writing to the PostgreSQL Star Schema (`music_dw`) using temporary staging tables and set-based upserts (`ON CONFLICT DO UPDATE`), guaranteeing zero duplicate rows.
+
 ```mermaid
 flowchart TD
     subgraph S1["Source Layer"]
