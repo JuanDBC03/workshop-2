@@ -44,6 +44,16 @@ The pipeline produces a trusted, dimensional **Data Warehouse (Star Schema)** to
   * **Why Cross Sources:** Grammy award counts measure historical industry acclaim, while Spotify's catalog categorizations measure how many distinct musical genres each artist produces.
   * **Empirical Finding:** Multi-awarded artists ($\ge 3$ wins) explore an average of **2.05 genres** across their catalog—a **+55% increase** over non-winners (**1.32 genres**). Elite industry acclaim is strongly correlated with artistic versatility.
 
+### End-to-End Traceability Matrix (Rubric Section 8.2)
+
+The matrix below connects each business requirement through the full data engineering lifecycle:
+
+| Requirement | Required Data | Quality Risk | DQ Rule | GX Expectation | Transformation | DW Element | KPI / Visualization |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **REQ-01** (Decade Popularity) | `year`, `nominee`, `track_name`, `popularity` | Missing popularity; out-of-bound award years; null track keys. | `DQ-RAW-01`, `DQ-RAW-04`, `DQ-PREP-01b` | `ExpectColumnValuesToBeBetween(year, [1958, 2026])`; `ExpectColumnValuesToBeBetween(popularity, [0, 100])` | Bucket `year` into decades (`1960s`–`2010s`) & eras; normalize song titles. | `dim_ceremony_time`, `fact_track_performance.popularity` | **Visual 1:** Popularity by Decade bar chart; **KPI 1:** Catalog avg popularity (`38.50`). |
+| **REQ-02** (Acoustic Gap) | `artist`, `winner`, `artists`, `track_genre`, `energy`, `speechiness` | Energy or speechiness exceeding $[0.0, 1.0]$; non-boolean winner flags. | `DQ-RAW-02a/b`, `DQ-RAW-05`, `DQ-PREP-02` | `ExpectColumnValuesToBeBetween(energy, [0.0, 1.0])`; `ExpectColumnValuesToBeInSet(winner, [True, False])` | Parse lead artist from `;` list; cluster genres into `Pop` & `Urban`; derive binary `is_grammy_winner`. | `dim_artist`, `dim_genre.macro_category`, `fact_track_performance.energy` | **Visual 2:** Clustered energy comparison (Pop: 0.56 vs 0.63; Urban: 0.64 vs 0.70); **KPI 2:** Pop Winner Energy (`0.56`). |
+| **REQ-03** (Genre Versatility) | `artist`, `category`, `winner`, `artists`, `track_genre` | Missing genres; multi-credit artist collisions; unnormalized genre strings. | `DQ-RAW-03`, `DQ-PREP-01a`, `DQ-PREP-03` | `ExpectColumnValuesToNotBeNull(track_genre)`; `ExpectColumnValuesToNotBeNull(artist_name)` | Aggregate Grammy wins per artist; enforce composite grain `(track_id, track_genre)`; classify Award Tiers. | `dim_artist.grammy_awards_count`, `dim_genre`, `fact_track_performance` | **Visual 3:** Distinct genres by award tier ($\ge 3$ wins: 2.05, 1–2 wins: 1.86, 0 wins: 1.32); **KPI 3:** Versatility Ratio (`2.05`). |
+
 ---
 
 ## 3. Data Sources
@@ -404,26 +414,7 @@ GROUP BY 1;
 
 ---
 
-## 15. Oral Defense Technical Q&A
-
-### Q1: Why use TaskFlow API (`from airflow.sdk import dag, task`) instead of standard `PythonOperator`?
-> *"The TaskFlow API is the modern standard of Apache Airflow 3. It eliminates boilerplate code, handles parameter passing cleanly, and communicates workflow dependencies explicitly without sending heavy DataFrames through orchestrator metadata."*
-
-### Q2: How does the pipeline guarantee idempotency? What happens if `load_dw` fails midway?
-> *"All loading operations run inside an atomic database transaction (`with engine.begin()`). If an error occurs, PostgreSQL automatically rolls back the entire batch. Furthermore, the load logic uses temporary staging tables and set-based upserts (`ON CONFLICT (track_id, genre_id) DO UPDATE`), guaranteeing that rerunning updates existing keys rather than duplicating rows."*
-
-### Q3: Why is selective retrying used instead of a blanket `retries=3` on every task?
-> *"Data quality contract violations are deterministic: retrying an invalid value 3 times produces the identical failure 3 times, wasting resources. Therefore, validation tasks use `retries=0`. In contrast, database network operations use `retries=2` to tolerate transient connection drops or temporary write locks."*
-
-### Q4: Why use Great Expectations 1.x instead of basic Python assertions?
-> *"Great Expectations provides formal, auditable data contracts. It produces structured validation statistics, tracks severities (Critical vs Warning), and generates auditable artifacts. Basic assertions halt execution without diagnostic context."*
-
-### Q5: How is REQ-01 answered without duplicating track records for songs awarded multiple times?
-> *"In our Star Schema, `dim_track` maintains one unique record per Spotify song. Historical ceremony context is normalized into `dim_ceremony_time`. The fact table `fact_track_performance` models each track performance by genre and links to the award ceremony time key, allowing analytical queries to aggregate popularity by decade without duplicating acoustic measurements."*
-
----
-
-## 16. Setup and Execution Instructions
+## 15. Setup and Execution Instructions
 
 ### Prerequisites
 * Docker Desktop (running with WSL2 backend on Windows 11).
@@ -449,7 +440,7 @@ docker exec workshop2-airflow airflow dags trigger reliable_music_pipeline
 
 ---
 
-## 17. Assumptions and Limitations
+## 16. Assumptions and Limitations
 1. **Artist Matching Assumption:** Multi-artist collaborative tracks (e.g., `Ingrid Michaelson;ZAYN`) are credited to the primary lead artist for dimensional foreign key integrity.
 2. **Streaming Popularity Timeliness:** Spotify popularity is an instantaneous rolling metric reflecting current listening activity, enabling comparative analysis of catalog longevity.
 3. **Scope Limitation:** The Grammy dataset covers awards through 2019; contemporary tracks released after 2019 are evaluated under the non-awarded baseline.
