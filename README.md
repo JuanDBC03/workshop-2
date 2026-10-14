@@ -9,13 +9,21 @@
 ---
 
 ## 1. Problem and Analytical Objective
-Modern music streaming platforms manage vast catalogs of audio tracks and dynamic consumption metrics. However, determining which catalog acquisitions and artist curation strategies maximize long-term business value requires crossing streaming consumption data with historical industry accolades. 
 
-This engineering system integrates two heterogeneous data sources:
-1. **Spotify Streaming Catalog** (CSV format, ~114,000 tracks).
-2. **The Grammy Awards Repository** (Operational Relational Database in PostgreSQL, 4,810 records).
+> *"A Data Engineer does not build isolated scripts; a Data Engineer designs automated, resilient, and observable systems."*
 
-The pipeline produces a trusted, dimensional **Data Warehouse (Star Schema)** to support catalog investment, acoustic curation, and artist versatility analytics.
+In the music industry, streaming platforms possess massive catalogs of songs, but raw playcounts alone do not explain what makes music culturally and commercially enduring. To uncover actionable intelligence for catalog acquisition, playlist curation, and talent scouting, streaming telemetry must be crossed with historical industry prestige.
+
+This project delivers an end-to-end, production-grade **Reliable Batch Data Pipeline** integrating two heterogeneous data sources:
+1. **Spotify Streaming Catalog** (~114,000 tracks in CSV format with algorithmic acoustic features).
+2. **The Grammy Awards Operational Repository** (4,810 historical records in a PostgreSQL relational database).
+
+### What Makes This System Reliable?
+Instead of assuming data is valid, the pipeline actively verifies it through three core engineering pillars:
+* **Automated Data Quality Gates (Great Expectations 1.x):** Formal data contracts inspect data before transformation and before loading, halting execution if critical physical boundaries (e.g., energy $\in [0, 1]$) are violated.
+* **Modern Workflow Orchestration (Apache Airflow 3.1.8):** A decoupled TaskFlow DAG executes parallel extraction branches and applies selective retries (0 retries for deterministic data bugs, 2 retries for transient database network locks).
+* **Idempotent Dimensional Data Warehouse (PostgreSQL Star Schema):** High-speed set-based staging upserts guarantee that rerunning the pipeline never corrupts or duplicates warehouse records ($\Delta = 0$).
+* **Executive Business Analytics (Power BI):** Direct DW-backed dashboards delivering clear empirical answers to 3 strategic business requirements.
 
 ---
 
